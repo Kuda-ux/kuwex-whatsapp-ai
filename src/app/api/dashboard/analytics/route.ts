@@ -1,73 +1,66 @@
 import { NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase';
+import { getDb } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  const db = createServerClient();
+  try {
+    const db = getDb();
 
-  // Messages per day (last 14 days)
-  const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString();
+    const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString();
 
-  const { data: recentMessages } = await db
-    .from('conversations')
-    .select('created_at, role, detected_intent')
-    .gte('created_at', fourteenDaysAgo)
-    .order('created_at', { ascending: true });
+    const [recentMsgs, escalationsResult, userCount, aiCount] = await Promise.all([
+      db.execute({
+        sql: 'SELECT created_at, role, detected_intent FROM conversations WHERE created_at >= ? ORDER BY created_at ASC',
+        args: [fourteenDaysAgo],
+      }),
+      db.execute('SELECT id, phone_number, reason, status, created_at FROM escalations ORDER BY created_at DESC LIMIT 10'),
+      db.execute("SELECT COUNT(*) as cnt FROM conversations WHERE role = 'user'"),
+      db.execute("SELECT COUNT(*) as cnt FROM conversations WHERE role = 'assistant'"),
+    ]);
 
-  // Group by day
-  const dailyMap: Record<string, { user: number; assistant: number }> = {};
-  (recentMessages || []).forEach((row: { created_at: string; role: string }) => {
-    const day = row.created_at.substring(0, 10);
-    if (!dailyMap[day]) dailyMap[day] = { user: 0, assistant: 0 };
-    if (row.role === 'user') dailyMap[day].user++;
-    else if (row.role === 'assistant') dailyMap[day].assistant++;
-  });
+    // Group by day
+    const dailyMap: Record<string, { user: number; assistant: number }> = {};
+    recentMsgs.rows.forEach((row) => {
+      const day = (row.created_at as string).substring(0, 10);
+      if (!dailyMap[day]) dailyMap[day] = { user: 0, assistant: 0 };
+      if (row.role === 'user') dailyMap[day].user++;
+      else if (row.role === 'assistant') dailyMap[day].assistant++;
+    });
 
-  const dailyMessages = Object.entries(dailyMap).map(([date, counts]) => ({
-    date,
-    incoming: counts.user,
-    outgoing: counts.assistant,
-  }));
+    const dailyMessages = Object.entries(dailyMap).map(([date, counts]) => ({
+      date,
+      incoming: counts.user,
+      outgoing: counts.assistant,
+    }));
 
-  // Intent distribution
-  const intentMap: Record<string, number> = {};
-  (recentMessages || []).forEach((row: { detected_intent: string | null; role: string }) => {
-    if (row.role === 'user' || !row.detected_intent) return;
-    intentMap[row.detected_intent] = (intentMap[row.detected_intent] || 0) + 1;
-  });
+    // Intent distribution
+    const intentMap: Record<string, number> = {};
+    recentMsgs.rows.forEach((row) => {
+      if (row.role === 'user' || !row.detected_intent) return;
+      const intent = row.detected_intent as string;
+      intentMap[intent] = (intentMap[intent] || 0) + 1;
+    });
 
-  const intentDistribution = Object.entries(intentMap).map(([name, value]) => ({
-    name,
-    value,
-  }));
+    const intentDistribution = Object.entries(intentMap).map(([name, value]) => ({
+      name,
+      value,
+    }));
 
-  // Recent escalations
-  const { data: escalations } = await db
-    .from('escalations')
-    .select('id, phone_number, reason, status, created_at')
-    .order('created_at', { ascending: false })
-    .limit(10);
+    const totalUser = Number(userCount.rows[0]?.cnt) || 0;
+    const totalAi = Number(aiCount.rows[0]?.cnt) || 0;
+    const responseRate = totalUser > 0 ? Math.min(Math.round((totalAi / totalUser) * 100), 100) : 0;
 
-  // Response rate (conversations with both user and assistant messages)
-  const { count: totalUserMsgs } = await db
-    .from('conversations')
-    .select('id', { count: 'exact', head: true })
-    .eq('role', 'user');
-
-  const { count: totalAiMsgs } = await db
-    .from('conversations')
-    .select('id', { count: 'exact', head: true })
-    .eq('role', 'assistant');
-
-  const responseRate = totalUserMsgs && totalUserMsgs > 0
-    ? Math.round(((totalAiMsgs || 0) / totalUserMsgs) * 100)
-    : 0;
-
-  return NextResponse.json({
-    dailyMessages,
-    intentDistribution,
-    escalations: escalations || [],
-    responseRate: Math.min(responseRate, 100),
-  });
+    return NextResponse.json({
+      dailyMessages,
+      intentDistribution,
+      escalations: escalationsResult.rows,
+      responseRate,
+    });
+  } catch (err) {
+    console.error('Analytics error:', err);
+    return NextResponse.json({
+      dailyMessages: [], intentDistribution: [], escalations: [], responseRate: 0,
+    });
+  }
 }

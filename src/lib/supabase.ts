@@ -1,18 +1,25 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, Client } from '@libsql/client';
 
-// Client-side Supabase (uses anon key, respects RLS)
-export function createBrowserClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+let _client: Client | null = null;
+
+export function getDb(): Client {
+  if (!_client) {
+    const url = process.env.TURSO_DATABASE_URL;
+    const authToken = process.env.TURSO_AUTH_TOKEN;
+
+    if (!url) {
+      throw new Error('TURSO_DATABASE_URL is not set');
+    }
+
+    _client = createClient({
+      url,
+      authToken,
+    });
+  }
+  return _client;
 }
 
-// Server-side Supabase (uses service role key, bypasses RLS)
-export function createServerClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false } }
-  );
+// Alias kept so existing imports still work
+export function createServerClient(): Client {
+  return getDb();
 }

@@ -1,41 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase';
+import { getDb } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
-  const db = createServerClient();
-  const { searchParams } = new URL(req.url);
-  const phone = searchParams.get('phone');
-  const limit = parseInt(searchParams.get('limit') || '50', 10);
+  try {
+    const db = getDb();
+    const { searchParams } = new URL(req.url);
+    const phone = searchParams.get('phone');
+    const limit = parseInt(searchParams.get('limit') || '50', 10);
 
-  if (phone) {
-    const { data, error } = await db
-      .from('conversations')
-      .select('*')
-      .eq('phone_number', phone)
-      .order('created_at', { ascending: true })
-      .limit(limit);
+    if (phone) {
+      const result = await db.execute({
+        sql: 'SELECT * FROM conversations WHERE phone_number = ? ORDER BY created_at ASC LIMIT ?',
+        args: [phone, limit],
+      });
+      return NextResponse.json(result.rows);
+    }
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    // Return recent conversations grouped by customer with client name
+    const result = await db.execute({
+      sql: `SELECT cu.id, cu.phone_number, cu.display_name, cu.last_message_at,
+              cu.is_escalated, cu.total_messages, c.business_name
+            FROM customers cu
+            LEFT JOIN clients c ON cu.client_id = c.id
+            ORDER BY cu.last_message_at DESC LIMIT ?`,
+      args: [limit],
+    });
+
+    // Format to match the frontend's expected shape
+    const data = result.rows.map((row) => ({
+      id: row.id,
+      phone_number: row.phone_number,
+      display_name: row.display_name,
+      last_message_at: row.last_message_at,
+      is_escalated: row.is_escalated === 1,
+      total_messages: row.total_messages,
+      clients: { business_name: row.business_name },
+    }));
+
     return NextResponse.json(data);
+  } catch (err) {
+    console.error('Conversations error:', err);
+    return NextResponse.json({ error: 'Failed to load conversations' }, { status: 500 });
   }
-
-  // Return recent conversations grouped by customer
-  const { data, error } = await db
-    .from('customers')
-    .select(`
-      id,
-      phone_number,
-      display_name,
-      last_message_at,
-      is_escalated,
-      total_messages,
-      clients ( business_name )
-    `)
-    .order('last_message_at', { ascending: false })
-    .limit(limit);
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data);
 }

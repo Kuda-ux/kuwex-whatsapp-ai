@@ -1,4 +1,4 @@
-import { createServerClient } from './supabase';
+import { getDb } from './supabase';
 import { detectIntent } from './intent';
 import { buildSystemPrompt, chatCompletion, ChatMessage } from './openrouter';
 import { sendWhatsAppMessage } from './whatsapp';
@@ -13,105 +13,106 @@ interface MessageContext {
 }
 
 export async function processIncomingMessage(msg: MessageContext): Promise<void> {
-  const db = createServerClient();
+  const db = getDb();
 
   // 1. Lookup client by phone_number_id
-  const { data: client, error: clientErr } = await db
-    .from('clients')
-    .select('*')
-    .eq('whatsapp_phone_number_id', msg.phoneNumberId)
-    .eq('is_active', true)
-    .single();
+  const clientResult = await db.execute({
+    sql: 'SELECT * FROM clients WHERE whatsapp_phone_number_id = ? AND is_active = 1 LIMIT 1',
+    args: [msg.phoneNumberId],
+  });
 
-  if (clientErr || !client) {
+  if (clientResult.rows.length === 0) {
     console.log(`No active client for phone_number_id: ${msg.phoneNumberId}`);
     return;
   }
 
+  const client = clientResult.rows[0] as Record<string, unknown>;
+
   // 2. Upsert customer
-  const { data: upsertResult } = await db.rpc('upsert_customer', {
-    p_client_id: client.id,
-    p_phone_number: msg.phoneNumber,
-    p_display_name: msg.displayName,
+  const existingCustomer = await db.execute({
+    sql: 'SELECT id, total_messages FROM customers WHERE client_id = ? AND phone_number = ? LIMIT 1',
+    args: [client.id as string, msg.phoneNumber],
   });
 
-  const customerId = upsertResult as string;
-  if (!customerId) {
-    console.error('Failed to upsert customer');
-    return;
+  let customerId: string;
+
+  if (existingCustomer.rows.length > 0) {
+    customerId = existingCustomer.rows[0].id as string;
+    await db.execute({
+      sql: `UPDATE customers SET last_message_at = datetime('now'), total_messages = total_messages + 1,
+            display_name = COALESCE(?, display_name), updated_at = datetime('now')
+            WHERE id = ?`,
+      args: [msg.displayName || null, customerId],
+    });
+  } else {
+    customerId = crypto.randomUUID().replace(/-/g, '');
+    await db.execute({
+      sql: `INSERT INTO customers (id, client_id, phone_number, display_name) VALUES (?, ?, ?, ?)`,
+      args: [customerId, client.id as string, msg.phoneNumber, msg.displayName || null],
+    });
   }
 
   // 3. Store user message
-  await db.from('conversations').insert({
-    client_id: client.id,
-    customer_id: customerId,
-    phone_number: msg.phoneNumber,
-    role: 'user',
-    message_text: msg.messageText,
-    whatsapp_message_id: msg.messageId,
+  await db.execute({
+    sql: `INSERT INTO conversations (client_id, customer_id, phone_number, role, message_text, whatsapp_message_id)
+          VALUES (?, ?, ?, 'user', ?, ?)`,
+    args: [client.id as string, customerId, msg.phoneNumber, msg.messageText, msg.messageId],
   });
 
   // 4. Check if already escalated
-  const { data: customerRow } = await db
-    .from('customers')
-    .select('is_escalated')
-    .eq('client_id', client.id)
-    .eq('phone_number', msg.phoneNumber)
-    .single();
+  const escCheck = await db.execute({
+    sql: 'SELECT is_escalated FROM customers WHERE client_id = ? AND phone_number = ? LIMIT 1',
+    args: [client.id as string, msg.phoneNumber],
+  });
 
-  if (customerRow?.is_escalated) {
+  if (escCheck.rows.length > 0 && escCheck.rows[0].is_escalated === 1) {
     const reply = `Thank you for your message. Your conversation has been assigned to a team member at ${client.business_name}. They will respond to you shortly.`;
     await sendWhatsAppMessage({
       to: msg.phoneNumber,
       text: reply,
       phoneNumberId: msg.phoneNumberId,
-      accessToken: client.whatsapp_access_token,
+      accessToken: client.whatsapp_access_token as string,
     });
     return;
   }
 
   // 5. Get conversation history
-  const { data: historyRows } = await db
-    .from('conversations')
-    .select('role, message_text')
-    .eq('phone_number', msg.phoneNumber)
-    .eq('client_id', client.id)
-    .order('created_at', { ascending: false })
-    .limit(10);
+  const historyResult = await db.execute({
+    sql: `SELECT role, message_text FROM conversations
+          WHERE phone_number = ? AND client_id = ?
+          ORDER BY created_at DESC LIMIT 10`,
+    args: [msg.phoneNumber, client.id as string],
+  });
 
-  const history: ChatMessage[] = (historyRows || [])
+  const history: ChatMessage[] = [...historyResult.rows]
     .reverse()
-    .map((r: { role: string; message_text: string }) => ({
+    .map((r) => ({
       role: r.role as 'user' | 'assistant',
-      content: r.message_text,
+      content: r.message_text as string,
     }));
 
   // 6. Detect intent
   const { intent, confidence } = detectIntent(msg.messageText);
 
   // 7. Log intent
-  await db.from('intent_logs').insert({
-    client_id: client.id,
-    phone_number: msg.phoneNumber,
-    message_text: msg.messageText,
-    detected_intent: intent,
-    confidence,
+  await db.execute({
+    sql: `INSERT INTO intent_logs (client_id, phone_number, message_text, detected_intent, confidence)
+          VALUES (?, ?, ?, ?, ?)`,
+    args: [client.id as string, msg.phoneNumber, msg.messageText, intent, confidence],
   });
 
   // 8. Handle human escalation
   if (intent === 'human_escalation') {
-    await db
-      .from('customers')
-      .update({ is_escalated: true, escalated_at: new Date().toISOString() })
-      .eq('client_id', client.id)
-      .eq('phone_number', msg.phoneNumber);
+    await db.execute({
+      sql: `UPDATE customers SET is_escalated = 1, escalated_at = datetime('now')
+            WHERE client_id = ? AND phone_number = ?`,
+      args: [client.id as string, msg.phoneNumber],
+    });
 
-    await db.from('escalations').insert({
-      client_id: client.id,
-      customer_id: customerId,
-      phone_number: msg.phoneNumber,
-      reason: 'Customer requested human agent',
-      trigger_message: msg.messageText,
+    await db.execute({
+      sql: `INSERT INTO escalations (client_id, customer_id, phone_number, reason, trigger_message)
+            VALUES (?, ?, ?, 'Customer requested human agent', ?)`,
+      args: [client.id as string, customerId, msg.phoneNumber, msg.messageText],
     });
 
     const escalationReply = `I understand you'd like to speak with a real person. Let me connect you with our team right away.\n\nSomeone from ${client.business_name} will reach out to you shortly. Thank you for your patience!`;
@@ -120,16 +121,13 @@ export async function processIncomingMessage(msg: MessageContext): Promise<void>
       to: msg.phoneNumber,
       text: escalationReply,
       phoneNumberId: msg.phoneNumberId,
-      accessToken: client.whatsapp_access_token,
+      accessToken: client.whatsapp_access_token as string,
     });
 
-    await db.from('conversations').insert({
-      client_id: client.id,
-      customer_id: customerId,
-      phone_number: msg.phoneNumber,
-      role: 'assistant',
-      message_text: escalationReply,
-      detected_intent: intent,
+    await db.execute({
+      sql: `INSERT INTO conversations (client_id, customer_id, phone_number, role, message_text, detected_intent)
+            VALUES (?, ?, ?, 'assistant', ?, ?)`,
+      args: [client.id as string, customerId, msg.phoneNumber, escalationReply, intent],
     });
 
     return;
@@ -137,9 +135,9 @@ export async function processIncomingMessage(msg: MessageContext): Promise<void>
 
   // 9. Build prompt and call AI
   const systemPrompt = buildSystemPrompt(intent, {
-    business_name: client.business_name,
-    brand_tone: client.brand_tone || 'professional and friendly',
-    services_description: client.services_description || 'General business services',
+    business_name: client.business_name as string,
+    brand_tone: (client.brand_tone as string) || 'professional and friendly',
+    services_description: (client.services_description as string) || 'General business services',
   });
 
   const messages: ChatMessage[] = [
@@ -150,14 +148,10 @@ export async function processIncomingMessage(msg: MessageContext): Promise<void>
   const aiResult = await chatCompletion(messages);
 
   // 10. Store AI response
-  await db.from('conversations').insert({
-    client_id: client.id,
-    customer_id: customerId,
-    phone_number: msg.phoneNumber,
-    role: 'assistant',
-    message_text: aiResult.text,
-    detected_intent: intent,
-    tokens_used: aiResult.tokensUsed,
+  await db.execute({
+    sql: `INSERT INTO conversations (client_id, customer_id, phone_number, role, message_text, detected_intent, tokens_used)
+          VALUES (?, ?, ?, 'assistant', ?, ?, ?)`,
+    args: [client.id as string, customerId, msg.phoneNumber, aiResult.text, intent, aiResult.tokensUsed],
   });
 
   // 11. Send WhatsApp reply
@@ -165,6 +159,6 @@ export async function processIncomingMessage(msg: MessageContext): Promise<void>
     to: msg.phoneNumber,
     text: aiResult.text,
     phoneNumberId: msg.phoneNumberId,
-    accessToken: client.whatsapp_access_token,
+    accessToken: client.whatsapp_access_token as string,
   });
 }
