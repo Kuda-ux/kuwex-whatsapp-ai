@@ -8,9 +8,45 @@ export interface AIResponse {
   tokensUsed: number;
 }
 
+const PRIMARY_MODEL = 'meta-llama/llama-3.1-8b-instruct';
+const FALLBACK_MODEL = 'openrouter/free';
+
+async function callOpenRouter(apiKey: string, model: string, messages: ChatMessage[]): Promise<{ ok: boolean; text?: string; tokensUsed?: number; error?: string }> {
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'https://kuwex.co.zw',
+      'X-Title': 'Kuwex WhatsApp AI',
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      max_tokens: 500,
+      temperature: 0.7,
+    }),
+  });
+
+  if (!res.ok) {
+    const errBody = await res.text();
+    console.error(`OpenRouter error [${model}]:`, res.status, errBody);
+    return { ok: false, error: `${res.status}: ${errBody}` };
+  }
+
+  const data = await res.json();
+  const text = data.choices?.[0]?.message?.content;
+  if (!text) {
+    console.error(`OpenRouter empty response [${model}]:`, JSON.stringify(data));
+    return { ok: false, error: 'Empty response from model' };
+  }
+
+  return { ok: true, text, tokensUsed: data.usage?.total_tokens || 0 };
+}
+
 export async function chatCompletion(messages: ChatMessage[]): Promise<AIResponse> {
   const apiKey = process.env.OPENROUTER_API_KEY;
-  const model = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-8b-instruct:free';
+  const model = process.env.OPENROUTER_MODEL || PRIMARY_MODEL;
 
   if (!apiKey) {
     console.error('OPENROUTER_API_KEY not set');
@@ -21,36 +57,24 @@ export async function chatCompletion(messages: ChatMessage[]): Promise<AIRespons
   }
 
   try {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'https://kuwex.co.zw',
-        'X-Title': 'Kuwex WhatsApp AI',
-      },
-      body: JSON.stringify({
-        model,
-        messages,
-        max_tokens: 500,
-        temperature: 0.7,
-      }),
-    });
-
-    if (!res.ok) {
-      const errBody = await res.text();
-      console.error('OpenRouter error:', res.status, errBody);
-      return {
-        text: 'Thank you for your message! Let me connect you with our team for the best assistance.',
-        tokensUsed: 0,
-      };
+    // Try primary model
+    const primary = await callOpenRouter(apiKey, model, messages);
+    if (primary.ok) {
+      return { text: primary.text!, tokensUsed: primary.tokensUsed! };
     }
 
-    const data = await res.json();
-    const text = data.choices?.[0]?.message?.content || 'Thank you for your message! Our team will get back to you shortly.';
-    const tokensUsed = data.usage?.total_tokens || 0;
+    // If primary fails, try fallback model
+    console.warn(`Primary model ${model} failed, trying fallback ${FALLBACK_MODEL}...`);
+    const fallback = await callOpenRouter(apiKey, FALLBACK_MODEL, messages);
+    if (fallback.ok) {
+      return { text: fallback.text!, tokensUsed: fallback.tokensUsed! };
+    }
 
-    return { text, tokensUsed };
+    console.error('Both primary and fallback models failed');
+    return {
+      text: 'I apologize, I\'m having a brief technical issue. Please try again in a moment, or type "human" to speak with our team directly.',
+      tokensUsed: 0,
+    };
   } catch (err) {
     console.error('OpenRouter fetch error:', err);
     return {
