@@ -140,7 +140,7 @@ export default function DashboardOverview() {
                 {[
                   { label: 'WhatsApp Webhook', status: 'Active', ok: true },
                   { label: 'AI Engine (OpenRouter)', status: 'Connected', ok: true },
-                  { label: 'Database (Supabase)', status: 'Online', ok: true },
+                  { label: 'Database (Turso)', status: 'Online', ok: true },
                   { label: 'Auto-Response', status: 'Enabled', ok: true },
                 ].map((item) => (
                   <div key={item.label} className="flex items-center justify-between py-2">
@@ -153,6 +153,12 @@ export default function DashboardOverview() {
                     </div>
                   </div>
                 ))}
+              </div>
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <a href="/api/webhook/whatsapp?debug=1" target="_blank" rel="noopener noreferrer"
+                  className="text-xs text-blue-500 hover:text-blue-700 underline">
+                  View Debug Info
+                </a>
               </div>
             </div>
           </div>
