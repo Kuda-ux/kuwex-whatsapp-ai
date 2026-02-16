@@ -127,10 +127,10 @@ export default function DemoPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Live AI Demo</h1>
-          <p className="text-gray-500 mt-1">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Live AI Demo</h1>
+          <p className="text-gray-500 text-sm mt-1">
             Test the AI sales agent in real-time
             {clientName && <span> &mdash; responding as <strong className="text-green-600">{clientName}</strong></span>}
           </p>
@@ -140,7 +140,7 @@ export default function DemoPage() {
             <select
               value={selectedClient}
               onChange={(e) => { setSelectedClient(e.target.value); resetChat(); }}
-              className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-gray-50"
             >
               <option value="">Auto (first active)</option>
               {clients.map((c) => (
@@ -149,28 +149,28 @@ export default function DemoPage() {
             </select>
           )}
           <button onClick={resetChat}
-            className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm transition-colors">
+            className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm font-medium transition-colors">
             <RefreshCw className="w-4 h-4" /> New Chat
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Chat Window */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-gray-100 flex flex-col h-[calc(100vh-14rem)]">
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 flex flex-col h-[calc(100vh-16rem)] sm:h-[calc(100vh-14rem)]">
           {/* Chat Header */}
-          <div className="px-6 py-4 border-b border-gray-100 bg-green-500 rounded-t-xl">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-100 bg-gradient-to-r from-green-500 to-green-600 rounded-t-2xl">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                <Bot className="w-5 h-5 text-white" />
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/20 flex items-center justify-center">
+                <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
               </div>
               <div>
-                <h3 className="font-semibold text-white">{clientName || 'AI Sales Agent'}</h3>
-                <p className="text-xs text-green-100">
+                <h3 className="font-semibold text-white text-sm sm:text-base">{clientName || 'AI Sales Agent'}</h3>
+                <p className="text-[10px] sm:text-xs text-green-100">
                   {sending ? 'Typing...' : 'Online'}
                 </p>
               </div>
-              <div className="ml-auto flex items-center gap-1.5 px-2 py-1 bg-white/20 rounded-full">
+              <div className="ml-auto hidden sm:flex items-center gap-1.5 px-2 py-1 bg-white/20 rounded-full">
                 <Sparkles className="w-3 h-3 text-white" />
                 <span className="text-xs text-white font-medium">AI Powered</span>
               </div>
@@ -178,7 +178,7 @@ export default function DemoPage() {
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-[#f0f2f5]">
+          <div className="flex-1 overflow-y-auto p-3 sm:p-6 space-y-3 sm:space-y-4 bg-[#f0f2f5]">
             {messages.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full text-gray-400">
                 <MessageSquare className="w-16 h-16 mb-4 opacity-20" />
@@ -234,8 +234,8 @@ export default function DemoPage() {
 
           {/* Suggestions */}
           {messages.length === 0 && (
-            <div className="px-4 py-3 border-t border-gray-100 bg-white">
-              <div className="flex flex-wrap gap-2">
+            <div className="px-3 sm:px-4 py-2.5 sm:py-3 border-t border-gray-100 bg-white">
+              <div className="flex flex-wrap gap-1.5 sm:gap-2">
                 {suggestedMessages.map((s) => (
                   <button key={s} onClick={() => { setInput(s); }}
                     className="px-3 py-1.5 bg-green-50 text-green-700 rounded-full text-xs font-medium hover:bg-green-100 transition-colors">
@@ -247,7 +247,7 @@ export default function DemoPage() {
           )}
 
           {/* Input */}
-          <div className="px-4 py-3 border-t border-gray-100 bg-white rounded-b-xl">
+          <div className="px-3 sm:px-4 py-2.5 sm:py-3 border-t border-gray-100 bg-white rounded-b-2xl">
             <form onSubmit={(e) => { e.preventDefault(); sendMessage(); }} className="flex items-center gap-2">
               <input
                 type="text"
@@ -266,8 +266,8 @@ export default function DemoPage() {
         </div>
 
         {/* Info Panel */}
-        <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-gray-100 p-5">
+        <div className="space-y-4 hidden lg:block">
+          <div className="bg-white rounded-2xl border border-gray-100 p-5">
             <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-green-500" />
               How It Works
@@ -292,7 +292,7 @@ export default function DemoPage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-100 p-5">
+          <div className="bg-white rounded-2xl border border-gray-100 p-5">
             <h3 className="font-semibold text-gray-900 mb-3">Try These Scenarios</h3>
             <div className="space-y-2">
               {[
@@ -314,7 +314,7 @@ export default function DemoPage() {
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-5 text-white">
+          <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-2xl p-5 text-white">
             <h3 className="font-semibold mb-2">Presentation Mode</h3>
             <p className="text-sm text-green-100 leading-relaxed">
               This demo uses the <strong>exact same AI pipeline</strong> that powers the WhatsApp integration. Every message is processed through intent detection, context building, and AI generation in real-time.

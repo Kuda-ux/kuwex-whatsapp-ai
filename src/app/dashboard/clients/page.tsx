@@ -146,21 +146,21 @@ export default function ClientsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Clients</h1>
-          <p className="text-gray-500 mt-1">Manage businesses connected to the platform</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Clients</h1>
+          <p className="text-gray-500 text-sm mt-1">Manage businesses connected to the platform</p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={loadClients}
-            className="flex items-center gap-2 px-3 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm transition-colors"
+            className="flex items-center gap-2 px-3 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
           </button>
           <button
             onClick={() => { resetForm(); setShowForm(!showForm); }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium text-sm transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-xl font-medium text-sm transition-colors"
           >
             <Plus className="w-4 h-4" />
             Add Client
@@ -170,7 +170,7 @@ export default function ClientsPage() {
 
       {/* How to Get Credentials Guide */}
       {showForm && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-6">
+        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 sm:p-5 mb-4 sm:mb-6">
           <button
             onClick={() => setShowGuide(!showGuide)}
             className="flex items-center justify-between w-full text-left"
@@ -226,7 +226,7 @@ export default function ClientsPage() {
 
       {/* Add / Edit Client Form */}
       {showForm && (
-        <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-100 p-6 mb-6">
+        <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-gray-100 p-4 sm:p-6 mb-4 sm:mb-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-1">
             {editingId ? 'Edit Client' : 'New Client'}
           </h3>
@@ -313,9 +313,9 @@ export default function ClientsPage() {
 
       {/* Client Cards */}
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
           {[1, 2].map((i) => (
-            <div key={i} className="bg-white rounded-xl p-6 border border-gray-100 animate-pulse">
+            <div key={i} className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-100 animate-pulse">
               <div className="h-5 bg-gray-200 rounded w-40 mb-3" />
               <div className="h-4 bg-gray-100 rounded w-60 mb-2" />
               <div className="h-4 bg-gray-100 rounded w-48" />
@@ -323,7 +323,7 @@ export default function ClientsPage() {
           ))}
         </div>
       ) : clients.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-100 p-12 text-center">
+        <div className="bg-white rounded-2xl border border-gray-100 p-8 sm:p-12 text-center">
           <Building2 className="w-12 h-12 text-gray-300 mx-auto mb-3" />
           <h3 className="text-lg font-medium text-gray-900 mb-1">No clients yet</h3>
           <p className="text-gray-400 text-sm mb-4">Add your first business client to start processing WhatsApp messages.</p>
@@ -334,9 +334,9 @@ export default function ClientsPage() {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
           {clients.map((client) => (
-            <div key={client.id} className={`bg-white rounded-xl border p-6 transition-shadow hover:shadow-md ${
+            <div key={client.id} className={`bg-white rounded-2xl border p-4 sm:p-6 transition-all hover:shadow-lg hover:shadow-gray-100/50 ${
               !client.is_active ? 'border-gray-200 opacity-70' : 'border-gray-100'
             }`}>
               <div className="flex items-start justify-between mb-4">
