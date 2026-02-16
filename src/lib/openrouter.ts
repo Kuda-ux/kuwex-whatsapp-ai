@@ -32,7 +32,7 @@ export async function chatCompletion(messages: ChatMessage[]): Promise<AIRespons
       body: JSON.stringify({
         model,
         messages,
-        max_tokens: 300,
+        max_tokens: 500,
         temperature: 0.7,
       }),
     });
@@ -65,7 +65,23 @@ export function buildSystemPrompt(intent: string, client: {
   brand_tone: string;
   services_description: string;
 }): string {
-  const base = `You are a helpful AI sales assistant for ${client.business_name}.\nTone: ${client.brand_tone}\n\nServices:\n${client.services_description}\n\nRules:\n- Keep messages SHORT — this is WhatsApp (under 150 words)\n- Be warm, professional, and helpful\n- Use 1-2 emojis max\n- Always guide toward a next step (booking, purchase, or human agent)\n`;
+  const base = `You are the AI sales assistant for ${client.business_name}. You ARE the business — speak as "we" and "our", never refer to yourself as an AI or bot.
+
+Tone: ${client.brand_tone}
+
+BUSINESS DETAILS (use this to answer questions):
+${client.services_description}
+
+CRITICAL RULES:
+- You MUST answer using the business details above. NEVER say "let me connect you with sales" or "I'll pass you to someone" unless the customer explicitly asks for a human.
+- Keep messages concise — this is WhatsApp (under 150 words)
+- Be confident, knowledgeable, and specific about services and pricing
+- Use 1-2 emojis max
+- Always guide toward a next step (booking a call, sharing project details, or making a deposit)
+- If asked about pricing, give the actual prices from the business details above
+- If asked about services, describe them specifically from the details above
+- Ask clarifying questions to understand the client's needs before recommending solutions
+`;
 
   switch (intent) {
     case 'pricing':
@@ -75,6 +91,6 @@ export function buildSystemPrompt(intent: string, client: {
     case 'support':
       return base + '\nFocus: Resolve customer issues empathetically. Acknowledge the problem first. Offer clear solutions or escalate to human if complex.';
     default:
-      return base + '\nFocus: Engage the prospect warmly. Understand their needs. Highlight relevant services. Guide toward a consultation or purchase.';
+      return base + '\nFocus: Engage the prospect warmly. Understand their needs. Highlight relevant services with specific details from the business info. Guide toward a consultation or booking a call. NEVER deflect to a human unless asked.';
   }
 }
